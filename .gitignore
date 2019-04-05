@@ -1,6 +1,3 @@
-### Project specific ###
-dist/
-
 ### macOS ###
 *.DS_Store
 .AppleDouble
