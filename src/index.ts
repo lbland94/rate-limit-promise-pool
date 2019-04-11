@@ -11,23 +11,43 @@ export interface RateLimitPromisePoolItem {
   endTime: number;
 }
 
+export interface RateLimitPromisePoolCheckpoint {
+  callback: (data: any) => any;
+  data: any;
+  position: number;
+}
+
 export class RateLimitPromisePool {
   private concurrentLimit: number;
   private minWaitMs: number;
   private pool: RateLimitPromisePoolItem[] = [];
   private executionPool: RateLimitPromisePoolItem[] = [];
   private completedPool: RateLimitPromisePoolItem[] = [];
+  private checkpointList: RateLimitPromisePoolCheckpoint[] = [];
+  private promises: Promise<any>[] = [];
   private poolEmptyCallback: Function;
   private executing: boolean = false;
   private lastCallTimestamp: number = 0;
   private intervalRef: number = 0;
 
+  /**
+   * @description Initialize a promise pool.
+   * @param {number} concurrentLimit - Maximum number of items allowed to execute simultaneously.
+   * @param {number} minWaitMs - Minimum time in milliseconds between executions.
+   * @param {Function} poolEmptyCallback - A function called whenever the pool is empty. As new items can be added
+   * while the pool is empty and still running, this can be called multiple times.
+   */
   constructor(concurrentLimit: number, minWaitMs: number, poolEmptyCallback: Function) {
     this.concurrentLimit = concurrentLimit;
     this.minWaitMs = minWaitMs;
     this.poolEmptyCallback = poolEmptyCallback;
   }
 
+  /**
+   * @description Add an item to the pool to be executed.
+   * @param data - This will be passed to the `executionCallback` when it is run
+   * @param executionCallback - This should return a promise and will be run when its place comes up in the pool
+   */
   public addItem(data: any, executionCallback: (data: any) => Promise<any>) {
     this.pool.unshift({
       data: data,
@@ -42,6 +62,27 @@ export class RateLimitPromisePool {
     }
   }
 
+  /**
+   * @description Add a checkpoint to the pool. A checkpoint will be executed only after every item added to the pool
+   * before it was added has resolved its promise. This allows for ensuring that certain sections of the pool have
+   * been completed.
+   * 
+   * @param data - This will be passed to the `callback` when it is executed.
+   * @param callback - This will be called once all promises added to the pool prior to the checkpoint being added have
+   * been resolved.
+   */
+  public addCheckpoint(data: any, callback: (data: any) => any) {
+    this.checkpointList.push({
+      callback,
+      data,
+      position: this.executionPool.length + this.completedPool.length + this.pool.length,
+    });
+  }
+
+  /**
+   * @description Begin execution of the items in the pool. This can be called before or after adding items; the pool
+   * will continue execution until `stopExecution` is called even if it temporarily runs out of items.
+   */
   public startExecution() {
     this.executing = true;
 
@@ -75,6 +116,10 @@ export class RateLimitPromisePool {
     }, Math.max(this.minWaitMs));
   }
 
+  /**
+   * @description Stops further execution of the promise pool; no currently executing promises will be stopped, but no
+   * further promises will be executed.
+   */
   public stopExecution() {
     if (this.executing) {
       this.executing = false;
@@ -82,9 +127,24 @@ export class RateLimitPromisePool {
     }
   }
 
+  private checkCheckpoints() {
+    this.checkpointList.forEach((checkpoint, index) => {
+      if (this.promises.length >= checkpoint.position) {
+        Promise.all(this.promises.slice(0, checkpoint.position)).then(() => {
+          checkpoint.callback(checkpoint.data);
+        }).catch(() => {
+          checkpoint.callback(checkpoint.data);
+        });
+        this.checkpointList.splice(index, 1);
+      }
+    });
+  }
+
   private async execute(item: RateLimitPromisePoolItem) {
     try {
-      item.returnData = await item.execute(item.data);
+      const promise = item.execute(item.data);
+      this.promises.push(promise);
+      item.returnData = await promise;
     } catch (e) {
       item.returnData = e;
     }
@@ -95,5 +155,6 @@ export class RateLimitPromisePool {
       this.completedPool.push(this.executionPool[index]);
       this.executionPool.splice(index, 1);
     }
+    this.checkCheckpoints();
   }
 }

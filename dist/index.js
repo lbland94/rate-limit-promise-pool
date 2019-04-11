@@ -40,10 +40,19 @@ var __generator = (this && this.__generator) || function (thisArg, body) {
 };
 Object.defineProperty(exports, "__esModule", { value: true });
 var RateLimitPromisePool = /** @class */ (function () {
+    /**
+     * @description Initialize a promise pool.
+     * @param {number} concurrentLimit - Maximum number of items allowed to execute simultaneously.
+     * @param {number} minWaitMs - Minimum time in milliseconds between executions.
+     * @param {Function} poolEmptyCallback - A function called whenever the pool is empty. As new items can be added
+     * while the pool is empty and still running, this can be called multiple times.
+     */
     function RateLimitPromisePool(concurrentLimit, minWaitMs, poolEmptyCallback) {
         this.pool = [];
         this.executionPool = [];
         this.completedPool = [];
+        this.checkpointList = [];
+        this.promises = [];
         this.executing = false;
         this.lastCallTimestamp = 0;
         this.intervalRef = 0;
@@ -51,6 +60,11 @@ var RateLimitPromisePool = /** @class */ (function () {
         this.minWaitMs = minWaitMs;
         this.poolEmptyCallback = poolEmptyCallback;
     }
+    /**
+     * @description Add an item to the pool to be executed.
+     * @param data - This will be passed to the `executionCallback` when it is run
+     * @param executionCallback - This should return a promise and will be run when its place comes up in the pool
+     */
     RateLimitPromisePool.prototype.addItem = function (data, executionCallback) {
         this.pool.unshift({
             data: data,
@@ -64,6 +78,26 @@ var RateLimitPromisePool = /** @class */ (function () {
             this.startExecution();
         }
     };
+    /**
+     * @description Add a checkpoint to the pool. A checkpoint will be executed only after every item added to the pool
+     * before it was added has resolved its promise. This allows for ensuring that certain sections of the pool have
+     * been completed.
+     *
+     * @param data - This will be passed to the `callback` when it is executed.
+     * @param callback - This will be called once all promises added to the pool prior to the checkpoint being added have
+     * been resolved.
+     */
+    RateLimitPromisePool.prototype.addCheckpoint = function (data, callback) {
+        this.checkpointList.push({
+            callback: callback,
+            data: data,
+            position: this.executionPool.length + this.completedPool.length + this.pool.length,
+        });
+    };
+    /**
+     * @description Begin execution of the items in the pool. This can be called before or after adding items; the pool
+     * will continue execution until `stopExecution` is called even if it temporarily runs out of items.
+     */
     RateLimitPromisePool.prototype.startExecution = function () {
         var _this = this;
         this.executing = true;
@@ -98,21 +132,40 @@ var RateLimitPromisePool = /** @class */ (function () {
             }
         }, Math.max(this.minWaitMs));
     };
+    /**
+     * @description Stops further execution of the promise pool; no currently executing promises will be stopped, but no
+     * further promises will be executed.
+     */
     RateLimitPromisePool.prototype.stopExecution = function () {
         if (this.executing) {
             this.executing = false;
             clearInterval(this.intervalRef);
         }
     };
+    RateLimitPromisePool.prototype.checkCheckpoints = function () {
+        var _this = this;
+        this.checkpointList.forEach(function (checkpoint, index) {
+            if (_this.promises.length >= checkpoint.position) {
+                Promise.all(_this.promises.slice(0, checkpoint.position)).then(function () {
+                    checkpoint.callback(checkpoint.data);
+                }).catch(function () {
+                    checkpoint.callback(checkpoint.data);
+                });
+                _this.checkpointList.splice(index, 1);
+            }
+        });
+    };
     RateLimitPromisePool.prototype.execute = function (item) {
         return __awaiter(this, void 0, void 0, function () {
-            var _a, e_1, index;
+            var promise, _a, e_1, index;
             return __generator(this, function (_b) {
                 switch (_b.label) {
                     case 0:
                         _b.trys.push([0, 2, , 3]);
+                        promise = item.execute(item.data);
+                        this.promises.push(promise);
                         _a = item;
-                        return [4 /*yield*/, item.execute(item.data)];
+                        return [4 /*yield*/, promise];
                     case 1:
                         _a.returnData = _b.sent();
                         return [3 /*break*/, 3];
@@ -127,6 +180,7 @@ var RateLimitPromisePool = /** @class */ (function () {
                             this.completedPool.push(this.executionPool[index]);
                             this.executionPool.splice(index, 1);
                         }
+                        this.checkCheckpoints();
                         return [2 /*return*/];
                 }
             });
