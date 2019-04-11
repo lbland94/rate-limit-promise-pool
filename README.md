@@ -4,8 +4,8 @@ This project is meant to help rate limit a group of promises. It has a concurren
 
 ## Example usage:
 
-```
-// Initialize a pool object with a concurrent limit of 10 and 50 milliseconds minimum between each call
+```js
+// Initialize a pool object with a concurrent limit of 10 and 50 milliseconds minimum between each call.
 const pool = new RateLimitPromisePool(10, 50, () => {
   console.log('All jobs complete');
 });
@@ -19,6 +19,12 @@ for (let i=0; i<50; i++) {
     .then(() => {console.log(data.index + ' success')})
     .catch(() => {console.log(data.index + ' failure')});
   });
+  // Add some checkpoints that will get called once all previous items have resolved their promises.
+  if (i % 7 === 0) {
+    pool.addCheckpoint(i, (data) => {
+      console.log(`first ${data} definitely completed`);
+    });
+  }
 }
 
 // Start execution
