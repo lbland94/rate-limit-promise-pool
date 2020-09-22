@@ -27,6 +27,21 @@ export declare class RateLimitPromisePool {
     private lastCallTimestamp;
     private intervalRef;
     /**
+     * @description Number of promises that have resolved
+     * @returns {number} The number of resolved promises
+     */
+    get completed(): number;
+    /**
+     * @description Number of promises that have not yet resolved
+     * @returns {number} The number of unresolved promises
+     */
+    get incomplete(): number;
+    /**
+     * @description Convenience getter to calculate the percentage of promises that are complete
+     * @returns {number} The percentage of the pool that has been completed
+     */
+    get percentComplete(): number;
+    /**
      * @description Initialize a promise pool.
      * @param {number} concurrentLimit - Maximum number of items allowed to execute simultaneously.
      * @param {number} minWaitMs - Minimum time in milliseconds between executions.
@@ -60,6 +75,6 @@ export declare class RateLimitPromisePool {
      * further promises will be executed.
      */
     stopExecution(): void;
-    private checkCheckpoints();
-    private execute(item);
+    private checkCheckpoints;
+    private execute;
 }

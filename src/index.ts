@@ -31,6 +31,30 @@ export class RateLimitPromisePool {
   private intervalRef: number = 0;
 
   /**
+   * @description Number of promises that have resolved
+   * @returns {number} The number of resolved promises
+   */
+  public get completed(): number {
+    return this.completedPool.length;
+  }
+
+  /**
+   * @description Number of promises that have not yet resolved
+   * @returns {number} The number of unresolved promises
+   */
+  public get incomplete(): number {
+    return this.pool.length + this.executionPool.length;
+  }
+
+  /**
+   * @description Convenience getter to calculate the percentage of promises that are complete
+   * @returns {number} The percentage of the pool that has been completed
+   */
+  public get percentComplete(): number {
+    return this.completed / (this.completed + this.incomplete);
+  }
+
+  /**
    * @description Initialize a promise pool.
    * @param {number} concurrentLimit - Maximum number of items allowed to execute simultaneously.
    * @param {number} minWaitMs - Minimum time in milliseconds between executions.

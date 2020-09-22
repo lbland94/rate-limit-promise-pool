@@ -1,6 +1,6 @@
 {
   "name": "rate-limit-promise-pool",
-  "version": "0.0.2",
+  "version": "0.0.3",
   "description": "A class to run a group of promises while keeping the number running at one time and the minimum time between each one consistent",
   "main": "dist/index.js",
   "types": "dist/index.d.ts",
@@ -9,5 +9,8 @@
     "build": "tsc"
   },
   "author": "",
-  "license": "MIT"
+  "license": "MIT",
+  "devDependencies": {
+    "typescript": "^4.0.3"
+  }
 }
